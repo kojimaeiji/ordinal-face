@@ -18,6 +18,7 @@ from keras.layers.convolutional import Conv2D
 from keras.layers.pooling import MaxPool2D
 import cv2
 from keras.utils import Sequence
+import random
 
 """Implements the Keras Sequential model."""
 
@@ -44,6 +45,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 import numpy as np
+import pandas as pd
 
 # csv columns in the input file
 CSV_COLUMNS = ('age', 'workclass', 'fnlwgt', 'education', 'education_num',
@@ -70,10 +72,7 @@ LABEL_COLUMN = 'income_bracket'
 #    zip(*CATEGORICAL_COLS)[0] + CONTINUOUS_COLS + (LABEL_COLUMN,))
 
 
-def model_fn(input_dim,
-             labels_dim,
-             hidden_units=[100, 70, 50, 20],
-             learning_rate=0.1):
+def model_fn(learning_rate=0.1):
     """Create a Keras Sequential model with layers."""
     model = models.Sequential()
 
@@ -165,30 +164,53 @@ def to_savedmodel(model, export_path):
 #   return features
 
 
-def get_meta(mat_path):
-    meta = loadmat(mat_path)
-    full_path = meta['full_path']
-    age = meta['age']
+def get_meta(input_path):
+    meta = pd.read_csv(tf.gfile.Open(input_path), header=None)
 
-    return full_path, age
+    return meta
 
 
 def get_length(input_path):
-    full_path, _ = get_meta(input_path)
+    full_path,_, _ = get_meta(input_path)
     return len(full_path)
 
+def convert_to_ordinal(age):
+    age_vec = np.zeros(shape=(80,), dtype=np.float32)
+    for i in range(0, age_vec.shape[0]):
+        if age > i:
+            age_vec[i] = 1.0
+    #print('age=%s, age_vec = %s' % (age, age_vec))
+    return age_vec
+
+
 class DataSequence(Sequence):
-    def __init__(self, prefix, input_file, batch_size):
+    def __init__(self, prefix, input_file, debug_mode, batch_size, data_type='train'):
         # コンストラクタ
-        self.data_file_path = input_file[0]
-        self.data = get_meta(input_file[0])
+        self.data_file_path = input_file
+        data = get_meta(input_file)
+        if debug_mode:
+            train_len = 100
+            cv_len = 100
+        else:
+            train_len = int(len(data)*0.96)
+            cv_len = int(len(data)*0.02)
+
+        if data_type == 'train':
+            self.data = data[0:train_len]
+        elif data_type == 'cv':
+            self.data = data[train_len:train_len+cv_len]
+        else:
+            self.data = data[train_len+cv_len:]
+        for i in range(len(self.data)):
+            self.data.loc[i, 2] = convert_to_ordinal(self.data.loc[i, 2])     
         self.batch_size = batch_size
         self.length = len(self.data) % batch_size
         self.prefix = prefix
 
     def __getitem__(self, idx):
         # データの取得実装
-        full_path, age = self.data
+        full_path = self.data.loc[:, 0]
+        age = self.data.loc[:, 2]
         
         batch_size = self.batch_size
         
@@ -215,7 +237,7 @@ class DataSequence(Sequence):
 def convert_images(prefix, full_paths):
     x_train = []
     for full_path in full_paths:
-        full_path2 = '%s/%s' % (prefix,full_path[0])
+        full_path2 = '%s/%s' % (prefix,full_path)
         full_path2 = full_path2.strip()
         #print('path=%s' % full_path2)
         img = cv2.imread(full_path2, 1)
@@ -235,18 +257,18 @@ def convert_images(prefix, full_paths):
 #     """Generator function to produce features and labels
 #          needed by keras fit_generator.
 #     """
-#     #   input_reader = pd.read_csv(tf.gfile.Open(input_file[0]),
+#     input_reader = pd.read_csv(tf.gfile.Open(input_file[0]),
 #     #                            #names=CSV_COLUMNS,
-#     #                            header=None,
-#     #                            chunksize=chunk_size,
-#     #                            na_values=" ?")
-#     full_path, age = get_meta(input_file[0])
-# 
-#     #for full_path, age in input_reader:
-#     #input_data = input_data.dropna()
-#     #label = pd.get_dummies(input_data.pop(LABEL_COLUMN))
-# 
-#     #input_data = to_numeric_features(input_data)
+#                                 header=None,
+#                                 chunksize=chunk_size,
+    #                            na_values=" ?")
+    #full_path, age = get_meta(input_file[0])
+ 
+    #for full_path, age in input_reader:
+    #input_data = input_data.dropna()
+    #label = pd.get_dummies(input_data.pop(LABEL_COLUMN))
+ 
+    #input_data = to_numeric_features(input_data)
 #     n_rows = full_path.shape[0]
 #     return ( (full_path.iloc[[index % n_rows]], age.iloc[[index % n_rows]]) for index in itertools.count() )
 
@@ -255,7 +277,7 @@ if __name__ == '__main__':
     x_t, y_t = seq.__getitem__(0)
     img_mat = x_t[0]
     print('shape=%s' % ((img_mat.shape),))
-    model_fn(input_dim=1, labels_dim=1, hidden_units=[])
+    model_fn()
 #     img_mat = img_mat* 255.0
 #     img_mat = img_mat.astype(np.uint8)
 #     cv2.imshow('image',img_mat)

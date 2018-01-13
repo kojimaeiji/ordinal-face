@@ -47,13 +47,15 @@ class ContinuousEval(keras.callbacks.Callback):
                eval_files,
                learning_rate,
                job_dir,
-               steps=1000):
+               steps=1000,
+               debug_mode=False):
     self.eval_files = eval_files
     self.eval_prefix = eval_prefix
     self.eval_frequency = eval_frequency
     self.learning_rate = learning_rate
     self.job_dir = job_dir
     self.steps = steps
+    self.debug_mode = debug_mode
 
   def on_epoch_begin(self, epoch, logs={}):
     if epoch > 0 and epoch % self.eval_frequency == 0:
@@ -70,7 +72,7 @@ class ContinuousEval(keras.callbacks.Callback):
         census_model = model.compile_model(census_model, self.learning_rate)
         loss, acc = census_model.evaluate_generator(
             #model.generator_input(self.eval_files, chunk_size=CHUNK_SIZE),
-            DataSequence(self.eval_prefix, self.eval_files, batch_size=32),
+            DataSequence(self.eval_prefix, self.eval_files, self.debug_mode, batch_size=32, data_type='cv'),
             steps=self.steps)
         print('\nEvaluation epoch[{}] metrics[{:.2f}, {:.2f}] {}'.format(
             epoch, loss, acc, census_model.metrics_names))
@@ -94,8 +96,9 @@ def dispatch(train_files,
              eval_num_epochs,
              num_epochs,
              checkpoint_epochs,
-             image_input_prefix):
-  census_model = model.model_fn(INPUT_SIZE, CLASS_SIZE)
+             image_input_prefix,
+             debug_mode):
+  census_model = model.model_fn()
 
   try:
     os.makedirs(job_dir)
@@ -121,7 +124,7 @@ def dispatch(train_files,
                                 image_input_prefix,
                                 eval_files,
                                 learning_rate,
-                                job_dir)
+                                job_dir, debug_mode)
 
   # Tensorboard logs callback
   tblog = keras.callbacks.TensorBoard(
@@ -134,7 +137,7 @@ def dispatch(train_files,
 
   census_model.fit_generator(
       #model.generator_input(train_files, chunk_size=CHUNK_SIZE),
-      DataSequence(image_input_prefix, train_files, batch_size=32),
+      DataSequence(image_input_prefix, train_files, debug_mode, batch_size=32, data_type='train'),
       steps_per_epoch=train_steps,
       epochs=num_epochs,
       callbacks=callbacks)
@@ -229,6 +232,10 @@ if __name__ == "__main__":
                       type=str,
                       default='/home/jiman/facedata/imdb/intermediate',
                       help='Image Input Prefix')
+  parser.add_argument('--debug-mode',
+                      type=str,
+                      default=False,
+                      help='debug mode for small data')  
   parse_args, unknown = parser.parse_known_args()
 
   dispatch(**parse_args.__dict__)

@@ -1,5 +1,5 @@
 DATE=`date '+%Y%m%d_%H%M%S'`
-export JOB_NAME=simple_linear_$DATE
+export JOB_NAME=oridinal_face_$DATE
 export GCS_JOB_DIR=gs://kceproject-1113-ml/ml-job/$JOB_NAME
 echo $GCS_JOB_DIR
 export TRAIN_STEPS=5000
@@ -12,7 +12,10 @@ gcloud ml-engine jobs submit training $JOB_NAME \
                                     --package-path trainer/ \
                                     --region us-central1 \
                                     -- \
-                                    --train-files gs://kceproject-1113-ml/train/train.csv \
-                                    --eval-files gs://kceproject-1113-ml/test/test.csv \
+                                    --train-files "gs://kceproject-1113-ml/intermediate/csv/path_age.csv-00000-of-00221" \
+                                    --eval-files "gs://kceproject-1113-ml/intermediate/csv/path_age.csv-00000-of-00221" \
                                     --train-steps $TRAIN_STEPS \
-                                    --eval-steps 100
+                                    --debug-mode True \
+                                    --eval-steps 100 \
+                                    --image-input-prefix gs://kceproject-1113-ml/intermediate
+                                    #--scale-tier=basic-gpu

@@ -74,7 +74,7 @@ class MatSource(iobase.BoundedSource):
   def __init__(self, gs_path, filename, runner):
     self._filename = download_gs(gs_path, filename)
     _meta = loadmat(self._filename)
-    del_destination(GS_UPPATH)
+    #del_destination(GS_UPPATH)
     db = 'imdb'
     logger.info('loadmat end')
     full_path = _meta[db][0, 0]["full_path"][0]
@@ -99,10 +99,6 @@ class MatSource(iobase.BoundedSource):
 
   def __call__(self):
       return self.value
-
-#   def next(self):
-#       #self.records_read.inc()
-#       return self.full_path[0], self.age[0]
 
   def estimate_size(self):
     return self._count
@@ -146,7 +142,7 @@ class MatSource(iobase.BoundedSource):
       bundle_start = bundle_stop
 
 
-# 3.最後に標準出力にカウント数を出力して終わる
+# 3.イメージのリサイズ
 class ProcessImgFn(beam.DoFn):
   def process(self, element):
     path, _, _ = element
@@ -159,6 +155,7 @@ class ProcessImgFn(beam.DoFn):
     upload_gs(GS_UPPATH, path, filepath)
     os.remove(filepath)
 
+# csv形式に変換
 class ConvertToStr(beam.DoFn):
   def process(self, element):
     path, gender, age = element
@@ -187,8 +184,5 @@ def run(argv=None):
 
 if __name__ == '__main__':
   logger = logging.getLogger()
-  fh = StreamHandler()
-  fh.setLevel(logging.INFO)
-  logger.addHandler(fh)
   logger.setLevel(logging.INFO)
   run()

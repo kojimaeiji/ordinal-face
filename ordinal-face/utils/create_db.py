@@ -41,7 +41,7 @@ def main():
     out_ages = []
     out_imgs = []
 
-    length = len(face_score) if max_count is None else max_count
+    length = len(face_score)
     for i in tqdm(range(length)):
         if face_score[i] < min_score:
             continue
@@ -61,6 +61,9 @@ def main():
         img = cv2.resize(img, (img_size, img_size))
         #img = img
         out_imgs.append(img)
+        if max_count is not None and len(out_imgs) >= max_count:
+            break
+            
 
     output = {"image": np.array(out_imgs), "gender": np.array(out_genders), "age": np.array(out_ages),
               "db": db, "img_size": img_size, "min_score": min_score}

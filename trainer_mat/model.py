@@ -13,15 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from keras.layers.core import Flatten, Dense, Activation
+from keras.layers.core import Flatten, Dense, Activation, Dropout
 from keras.layers.convolutional import Conv2D
 from keras.layers.pooling import MaxPool2D
 from keras.datasets import cifar10
+from keras.models import Model
 #import cv2
 from keras.utils import Sequence
 from keras.utils import np_utils
 from scipy.io import loadmat
 import random
+from keras.layers.normalization import BatchNormalization
+import subprocess
 """Implements the Keras Sequential model."""
 
 
@@ -29,7 +32,7 @@ import keras
 import pandas as pd
 from keras import backend as K
 from keras import models
-
+from keras.layers import Input
 
 import tensorflow as tf
 from tensorflow.python.saved_model import builder as saved_model_builder
@@ -40,40 +43,56 @@ import numpy as np
 import logging
 
 
-def model_fn(learning_rate=0.01):
+def model_fn(learning_rate, lam, dropout):
     """Create a Keras Sequential model with layers."""
-    model = models.Sequential()
+    input = Input(shape=(60,60,3))
 
     # 1 block
-    model.add(Conv2D(20, (5, 5), strides=(1, 1), padding='valid',
-                     kernel_initializer='he_normal', input_shape=(60, 60, 3)))
-    model.add(Activation('relu'))
-    # model.add(BatchNormalization())
-    model.add(MaxPool2D(pool_size=(2, 2)))
+    model = Dropout(0.2, input_shape=(60, 60, 3))(input)
+    model = Conv2D(20, (5, 5), strides=(1, 1), padding='valid',
+                     kernel_initializer='he_normal', 
+                     kernel_regularizer=keras.regularizers.l2(lam)
+                     )(model)
+    model = BatchNormalization()(model)
+    model = Activation('relu')(model)
+    model = MaxPool2D(pool_size=(2, 2))(model)
+    model = Dropout(dropout)(model)
 
     # 2 block
-    model.add(Conv2D(40, (7, 7), strides=(1, 1),
-                     padding='valid', kernel_initializer='he_normal'))
-    model.add(Activation('relu'))
-    # model.add(BatchNormalization())
-    model.add(MaxPool2D(pool_size=(2, 2)))
+    model = Conv2D(40, (7, 7), strides=(1, 1),
+                     padding='valid', kernel_initializer='he_normal',
+                     kernel_regularizer=keras.regularizers.l2(lam))(model)
+    model = BatchNormalization()(model)
+    model = Activation('relu')(model)
+    model = MaxPool2D(pool_size=(2, 2))(model)
+    model = Dropout(dropout)(model)
 
     # 3 block
-    model.add(Conv2D(80, (11, 11), strides=(1, 1),
-                     padding='valid', kernel_initializer='he_normal'))
-    model.add(Activation('relu'))
-    # model.add(BatchNormalization())
+    model = Conv2D(80, (11, 11), strides=(1, 1),
+                     padding='valid', kernel_initializer='he_normal',
+                     kernel_regularizer=keras.regularizers.l2(lam))(model)
+    model = BatchNormalization()(model)
+    model = Activation('relu')(model)
+    model = Dropout(dropout)(model)
 
-    model.add(Flatten())
-    model.add(Dense(80))
-    model.add(Activation('sigmoid', name='last'))
-
+    model = Flatten()(model)
+    model = Dropout(dropout)(model)
+    model = Dense(80,
+                  kernel_regularizer=keras.regularizers.l2(lam))(model)
+    model = Activation('relu')(model)
+    outputs = []
+    for i in range(80):
+        out = Dropout(dropout, name='out_dropout%s' % i)(model)
+        out = Dense(2, kernel_regularizer=keras.regularizers.l2(lam), name='dense_out%s' % i)(out)
+        out = Activation('softmax', name='out%s' % i)(out)
+        outputs.append(out)
+    model = Model(inputs=input,outputs=outputs)
     compile_model(model, learning_rate)
     return model
 
 
 def compile_model(model, learning_rate):
-    model.compile(loss='binary_crossentropy',
+    model.compile(loss='categorical_crossentropy',
                   optimizer=keras.optimizers.Adam(lr=learning_rate),
                   metrics=['accuracy'])
     return model
@@ -97,47 +116,22 @@ def to_savedmodel(model, export_path):
         builder.save()
 
 
-def get_meta(input_path):
-    print('read input files')
-    files = tf.gfile.Glob(input_path[0])
-    print('find input files')
-
-    list_ = []
-    for file_ in files:
-        print('file=%s' % file_)
-        df = pd.read_csv(tf.gfile.Open(file_), index_col=None, header=None)
-        print(len(df))
-        list_.append(df)
-
-    frame = pd.concat(list_)
-    print(len(frame))
-    return frame
-
-
-def get_length(input_path):
-    full_path, _, _ = get_meta(input_path)
-    return len(full_path)
-
-
 def convert_to_ordinal(age):
-    age_vec = np.zeros(shape=(80,), dtype=np.float64)
-    for i in range(0, age_vec.shape[0]):
+    age_vecs = []
+    for i in range(80):
         if age > i:
-            age_vec[i] = 1.0
+            age_vec = np.array([0.0,1.0])
+        else:
+            age_vec = np.array([1.0,0.0])
+        age_vecs.append(age_vec) 
     #print('age=%s, age_vec = %s' % (age, age_vec))
-    return age_vec
+    return age_vecs
 
 
 class DataSequence(Sequence):
     def __init__(self, x, y, batch_size):
-        # コンストラクタ
-        #self.data_file_path = input_file
-        #data = get_meta(input_file)
         self.x = x
         self.y = y
-#         for i in range(len(self.y)):
-#             age_vec = convert_to_ordinal(self.y[i])
-#             self.y[i] = age_vec
         self.batch_size = batch_size
         self.length = len(self.x) // batch_size if len(
             self.x) % batch_size == 0 else (len(self.x) // batch_size) + 1
@@ -172,81 +166,23 @@ class DataSequence(Sequence):
 def convert_to_minibatch(X, Y, start_idx, end_idx):
     if end_idx:
         X_mini = X[start_idx:end_idx]
-        Y_mini = Y[start_idx:end_idx]
+        Y_mini = [Y[i][start_idx:end_idx] for i in range(len(Y))]
     else:
         X_mini = X[start_idx:]
-        Y_mini = Y[start_idx:]
+        Y_mini = [Y[i][start_idx:] for i in range(len(Y))]
 
-#     _x = []
-#     _y = []
-#     for x, y in zip(X_mini, Y_mini):
-#         _x.append(x)
-#         _y.append(y)
-#     _x = np.array(_x)
-#     _y = np.array(_y)
     return X_mini, Y_mini
 
-
-def convert_image(prefix, sub_path):
-    full_path = '%s/%s' % (prefix, sub_path)
-    full_path = full_path.strip()
-    #img = cv2.imread(tf.gfile.Open(full_path), 1)
-    img_array = np.asarray(bytearray(tf.gfile.FastGFile(
-        full_path, 'rb').read()), dtype=np.uint8)
-    img = cv2.imdecode(img_array, 1)
-    if img is None:
-        return None
-    img = img / 255.0
-    return img
-
-# def convert_images(prefix, full_paths):
-#     x_train = []
-#     for full_path in full_paths:
-#         full_path2 = '%s/%s' % (prefix,full_path)
-#         full_path2 = full_path2.strip()
-#         #print('path=%s' % full_path2)
-#         img = cv2.imread(full_path2, 1)
-#         if img is None:
-#             x_train.appene(None)
-#             continue
-#             #raise Exception('image is None:%s' % (full_path2))
-#         img = img/255.0
-#         #print('img shape=%s' % ((img.shape),))
-#         #img = img1[...,::-1]
-#         #img = np.around(np.transpose(img, (2,0,1))/255.0, decimals=12)
-#         x_train.append(img)
-#     x_train = np.array(x_train)
-#     #print('x_train shape=%s' % ((x_train.shape),))
-#     return x_train
-
-
-# def generator_input(input_file, chunk_size):
-#     """Generator function to produce features and labels
-#          needed by keras fit_generator.
-#     """
-#     input_reader = pd.read_csv(tf.gfile.Open(input_file[0]),
-#     #                            #names=CSV_COLUMNS,
-#                                 header=None,
-#                                 chunksize=chunk_size,
-    #                            na_values=" ?")
-    #full_path, age = get_meta(input_file[0])
-
-    # for full_path, age in input_reader:
-    #input_data = input_data.dropna()
-    #label = pd.get_dummies(input_data.pop(LABEL_COLUMN))
-
-    #input_data = to_numeric_features(input_data)
-#     n_rows = full_path.shape[0]
-# return ( (full_path.iloc[[index % n_rows]], age.iloc[[index % n_rows]])
-# for index in itertools.count() )
 def unpack(xy):
     x, y = xy
     return x, y
 
 
-def load_data():
-    mat_path = '/Users/saboten/data/wiki_process_10000.mat'
-    d = loadmat(mat_path)
+def load_data(mat_path):
+    cmd = 'gsutil cp %s /tmp' % mat_path[0]
+    subprocess.check_call(cmd.split())
+    filename = mat_path[0].split('/')[-1]
+    d = loadmat('/tmp/%s' % filename)
 
     x, y = d["image"], d["age"][0]
     length = len(y)
@@ -264,9 +200,20 @@ def load_data():
     y_test = np.array([full_mat_test[i][1] for i in range(test_length)])
     return (x_train, y_train), (x_test, y_test)
 
+def convert_to_column_list(y):
+    columns = []
+    column_len = len(y[0])
+    for j in range(column_len):
+        column = []
+        for i in range(len(y)):
+            one_ele = y[i][j]
+            column.append(one_ele)
+        column = np.array(column)
+        columns.append(column)
+    return columns
 
-def create_data():
-    (X_train, y_train), (X_test, y_test) = load_data()
+def create_data(input_file):
+    (X_train, y_train), (X_test, y_test) = load_data(input_file)
 
     # データをfloat型にして正規化する
     X_train = X_train.astype('float32') / 255.0
@@ -289,31 +236,40 @@ def create_data():
     y_test = y_test.astype('int32')
     #y_train = np_utils.to_categorical(y_train, 10)
 #     y_test = np_utils.to_categorical(y_test, 10)
-    length_train = len(y_train)
-    y_train = np.array([convert_to_ordinal(y_train[i])
-                        for i in range(len(y_train))])
-    y_test = np.array([convert_to_ordinal(y_test[i])
-                       for i in range(len(y_test))])
-
+    y_train = [convert_to_ordinal(y_train[i])
+                        for i in range(len(y_train))]
+    y_train = convert_to_column_list(y_train)
+    y_test = [convert_to_ordinal(y_test[i])
+                       for i in range(len(y_test))]
+    y_test = convert_to_column_list(y_test)
     return X_train, y_train, X_test, y_test, input_shape
 
 
 if __name__ == '__main__':
-    x_tr, y_tr, x_t, y_t, input_shape = create_data()
+    x_tr, y_tr, x_t, y_t, input_shape = create_data(['gs://kceproject-1113-ml/ordinal-face/wiki_process_10000.mat'])
     print(x_tr.shape, input_shape)
-    print(y_tr.shape)
+    print(len(y_tr))
     print(y_tr[0])
+    
+    model = model_fn(learning_rate=0.001, lam=0.0, dropout=0.5)
+    #print(model.summary())
     #print(type(np_utils.to_categorical(5, 10)[0]))
 #     data = get_meta(
 #         ['gs://kceproject-1113-ml/intermediate/csv/path_age.csv-00000-of-00221'])
-#     seq = DataSequence(prefix=u'gs://kceproject-1113-ml/intermediate',
+    seq = DataSequence(x_tr, y_tr, 64)
 #                        input_file=[
 #                            u'gs://kceproject-1113-ml/intermediate/csv/path_age.csv-00000-of-00221'],
 #                        debug_mode=True,
 #                        meta_data=data,
 #                        batch_size=32,
 #                        data_type='train')
-#     x_t, y_t = seq.__getitem__(0)
+    x_t, y_t = seq.__getitem__(0)
+    print(x_t.shape)
+    print(len(y_t[0][0]))
+    
+    print(len(model.evaluate_generator(
+                    seq,
+                    steps=seq.length)))
 #     img_mat = x_t[0]
 #     print('shape=%s' % ((img_mat.shape),))
 #     print(type(x_t[0][0][0][0]))

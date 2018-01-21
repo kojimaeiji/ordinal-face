@@ -200,8 +200,11 @@ def convert_image(prefix, sub_path):
     full_path = '%s/%s' % (prefix,sub_path)
     full_path = full_path.strip()
     #img = cv2.imread(tf.gfile.Open(full_path), 1)
-    img_array = np.asarray(bytearray(tf.gfile.FastGFile(full_path, 'rb').read()), dtype=np.uint8)
-    img = cv2.imdecode(img_array, 1)
+    if tf.gfile.Exists(full_path):
+        img_array = np.asarray(bytearray(tf.gfile.FastGFile(full_path, 'rb').read()), dtype=np.uint8)
+        img = cv2.imdecode(img_array, 1)
+    else:
+        return None
     if img is None:
         return None
     img = img/255.0

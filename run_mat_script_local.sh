@@ -1,19 +1,18 @@
 DATE=`date '+%Y%m%d_%H%M%S'`
-export JOB_NAME=simple_linear_$DATE
-export GCS_JOB_DIR=/Users/saboten/mljob
+export JOB_NAME=ordinal_face_$DATE
+export GCS_JOB_DIR=/home/jiman/mljob
 echo $GCS_JOB_DIR
 export TRAIN_STEPS=100
-rm -rf /Users/saboten/mljob
+rm -rf /home/jiman/mljob
 
 gcloud ml-engine local train \
   --job-dir $GCS_JOB_DIR \
---module-name trainer_mat.task \
---package-path trainer_mat/ \
+  --module-name trainer_mat.task \
+  --package-path trainer_mat/ \
   -- \
-  --train-files "gs://kceproject-1113-ml/intermediate/csv/path_age.csv-00000-of-00221" \
-  --eval-files "gs://kceproject-1113-ml/intermediate/csv/path_age.csv-00000-of-00221" \
-  --debug-mode True \
-  --train-steps $TRAIN_STEPS \
-  --eval-steps 100 \
---learning-rate 0.03 \
-  --image-input-prefix gs://kceproject-1113-ml/intermediate
+  --train-files "gs://kceproject-1113-ml/ordinal-face/wiki_process_10000.mat" \
+  --train-batch-size 64 \
+  --num-epochs 10 \
+  --lam 0.0 \
+  --dropout 0.5 \
+  --learning-rate 0.001

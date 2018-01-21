@@ -9,8 +9,8 @@ gcloud ml-engine local train \
   --module-name trainer.task \
   --package-path trainer/ \
   -- \
-  --train-files "gs://kceproject-1113-ml/intermediate/csv/path_age.csv-00000-of-00221" \
-  --eval-files "gs://kceproject-1113-ml/intermediate/csv/path_age.csv-00000-of-00221" \
+  --train-files "gs://kceproject-1113-ml/intermediate/csv/*" \
+  --eval-files "gs://kceproject-1113-ml/intermediate/csv/*" \
   --debug-mode True \
   --train-steps $TRAIN_STEPS \
   --eval-steps 100 \

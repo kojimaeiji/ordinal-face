@@ -12,8 +12,8 @@ gcloud ml-engine jobs submit training $JOB_NAME \
                                     --package-path trainer/ \
                                     --region us-central1 \
                                     -- \
-                                    --train-files "gs://kceproject-1113-ml/intermediate/csv/path_age.csv-00000-of-00221" \
-                                    --eval-files "gs://kceproject-1113-ml/intermediate/csv/path_age.csv-00000-of-00221" \
+                                    --train-files "gs://kceproject-1113-ml/intermediate/csv/path_age.csv*" \
+                                    --eval-files "gs://kceproject-1113-ml/intermediate/csv/path_age.csv*" \
                                     --train-steps $TRAIN_STEPS \
                                     --debug-mode True \
                                     --eval-steps 100 \

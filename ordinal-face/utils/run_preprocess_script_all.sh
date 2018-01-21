@@ -2,7 +2,7 @@ export BUCKET="gs://kceproject-1113-ml"
 export PROJECT="kceproject-1113"
 python preprocess_by_beam.py \
   --project $PROJECT \
-  --runner DataFlowRunner \
+  --runner DirectRunner \
   --staging_location $BUCKET/staging \
   --temp_location $BUCKET/temp \
   --requirements_file requirements.txt \

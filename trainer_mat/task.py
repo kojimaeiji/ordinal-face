@@ -179,9 +179,9 @@ def dispatch(train_files,
     checkpoint_path = FILE_PATH
     if not job_dir.startswith("gs://"):
         checkpoint_path = os.path.join(job_dir, checkpoint_path)
-        verbose=2
-    else:
         verbose=1
+    else:
+        verbose=2
 #
 #     meta_data = get_meta(train_files)
 #     indexes = [i for i in range(len(meta_data))]

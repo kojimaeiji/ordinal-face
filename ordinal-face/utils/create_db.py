@@ -49,7 +49,7 @@ def main():
         if (~np.isnan(second_face_score[i])) and second_face_score[i] > 0.0:
             continue
 
-        if ~(0 <= age[i] <= 80):
+        if ~(0 <= age[i] <= 100):
             continue
 
         if np.isnan(gender[i]):

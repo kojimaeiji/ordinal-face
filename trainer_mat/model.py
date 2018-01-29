@@ -97,6 +97,15 @@ def compile_model(model, learning_rate):
                   metrics=['accuracy'])
     return model
 
+CONST_LIST = [float(_i) for _i in range(80)]
+
+def age_mae(y_true, y_pred):
+    y_true = tf.cast(K.argmax(y_true, axis=1), dtype=tf.float32)
+    labels = K.constant(CONST_LIST, dtype=tf.float32)
+    y_pred = labels * y_pred
+    y_pred = K.sum(y_pred, axis=1)
+    return K.mean(K.abs(y_true-y_pred), axis=0)
+
 
 def to_savedmodel(model, export_path):
     """Convert the Keras HDF5 model into TensorFlow SavedModel."""
@@ -244,32 +253,58 @@ def create_data(input_file):
     y_test = convert_to_column_list(y_test)
     return X_train, y_train, X_test, y_test, input_shape
 
+def rank_decode(preds):
+    ages = []
+    for j in range(len(preds[0])):
+        age = 0
+        for i in range(len(preds)):
+            # i番目のrankのフラグ回収
+            rank_flag = _rank_decode(preds[i][j])
+            age += rank_flag
+        ages.append(age)
+    return np.array(ages)
+
+def _rank_decode(pred_r):
+    if pred_r[1] > 0.5:
+        return 1.0
+    else:
+        return 0.0
+
 
 if __name__ == '__main__':
-    x_tr, y_tr, x_t, y_t, input_shape = create_data(['gs://kceproject-1113-ml/ordinal-face/wiki_process_10000.mat'])
-    print(x_tr.shape, input_shape)
-    print(len(y_tr))
-    print(y_tr[0])
-    
-    model = model_fn(learning_rate=0.001, lam=0.0, dropout=0.5)
+    y_train = np.array([15,16])
+    y_train = [convert_to_ordinal(y_train[i])
+                        for i in range(2)]
+    y_train = convert_to_column_list(y_train)
+    print('encoded=%s' % y_train)
+    y_train = rank_decode(y_train)
+    print('decoded=%s' % y_train)
+
+#     x_tr, y_tr, x_t, y_t, input_shape = create_data(['gs://kceproject-1113-ml/ordinal-face/wiki_process_10000.mat'])
+#     print(x_tr.shape, input_shape)
+#     print(len(y_tr))
+#     print(y_tr[0])
+#     
+#     model = model_fn(learning_rate=0.001, lam=0.0, dropout=0.5)
     #print(model.summary())
     #print(type(np_utils.to_categorical(5, 10)[0]))
 #     data = get_meta(
 #         ['gs://kceproject-1113-ml/intermediate/csv/path_age.csv-00000-of-00221'])
-    seq = DataSequence(x_tr, y_tr, 64)
+#    seq = DataSequence(x_tr, y_tr, 64)
 #                        input_file=[
 #                            u'gs://kceproject-1113-ml/intermediate/csv/path_age.csv-00000-of-00221'],
 #                        debug_mode=True,
 #                        meta_data=data,
 #                        batch_size=32,
 #                        data_type='train')
-    x_t, y_t = seq.__getitem__(0)
-    print(x_t.shape)
-    print(len(y_t[0][0]))
-    
-    print(len(model.evaluate_generator(
-                    seq,
-                    steps=seq.length)))
+#     x_t, y_t = seq.__getitem__(0)
+#     print(x_t.shape)
+#     print(len(y_t[0][0]))
+#     
+#     data=model.evaluate_generator(
+#                     seq,
+#                     steps=seq.length)
+#     print(data)
 #     img_mat = x_t[0]
 #     print('shape=%s' % ((img_mat.shape),))
 #     print(type(x_t[0][0][0][0]))

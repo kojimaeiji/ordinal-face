@@ -20,6 +20,7 @@ from logging import StreamHandler
 from sys import stdout
 from keras.models import load_model
 import multiprocessing
+import subprocess
 """This code implements a Feed forward neural network using Keras API."""
 
 import argparse
@@ -153,7 +154,7 @@ def dispatch(train_files,
              job_dir,
              train_batch_size,
              learning_rate,
-             eval_frequency,
+             model_file,
              num_epochs,
              checkpoint_epochs,
              lam,
@@ -166,7 +167,12 @@ def dispatch(train_files,
     logger.addHandler(sh)
     logger.setLevel(logging.INFO)
     logger.info('learning_rate=%s' % learning_rate)
-    census_model = model.model_fn(learning_rate, lam, dropout)
+    if model_file is not None:
+        cmd = 'gsutil cp %s /tmp' % model_file
+        subprocess.check_call(cmd.split())
+        census_model = load_model('/tmp/%s' % model_file.split('/')[-1])
+    else:
+        census_model = model.model_fn(learning_rate, lam, dropout)
 
     try:
         os.makedirs(job_dir)
@@ -298,9 +304,9 @@ if __name__ == "__main__":
                         type=float,
                         default=0.003,
                         help='Learning rate for Adam')
-    parser.add_argument('--eval-frequency',
-                        default=1,
-                        help='Perform one evaluation per n epochs')
+    parser.add_argument('--model-file',
+                        default=None,
+                        help='model file')
     parser.add_argument('--lam',
                         type=float,
                         default=0.0,

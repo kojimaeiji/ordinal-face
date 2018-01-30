@@ -9,6 +9,7 @@ from keras.models import load_model
 import cv2
 import subprocess
 import numpy as np
+from trainer_mat.model import rank_decode
 
 def prepare_image(img_file):
     print(img_file)
@@ -18,8 +19,9 @@ def prepare_image(img_file):
     return img
 
 def run(model_file, img_file):
-    cmd = 'gsutil cp %s /tmp' % model_file[0]
-    subprocess.check_call(cmd.split())
+    if model_file[0].startswith('gs://'):
+        cmd = 'gsutil cp %s /tmp' % model_file[0]
+        subprocess.check_call(cmd.split())
     filename = model_file[0].split('/')[-1]
     print(filename)
     ordinal_model = load_model('/tmp/%s' % filename)
@@ -27,7 +29,8 @@ def run(model_file, img_file):
     #                ordinal_model, learning_rate=0.001)
     img = prepare_image(img_file)
     predicted = ordinal_model.predict(np.array([img]))
-    print(np.sum(predicted[0] > 0.5))
+    predicted = rank_decode(predicted)
+    print(predicted)
 
 
 if __name__ == '__main__':
